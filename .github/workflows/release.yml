@@ -1,0 +1,9 @@
+name: release
+on: { push: { tags: ["v*"] } }
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy: { matrix: { os: [ubuntu-latest, macos-latest] } }
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "build 8lackout binary for ${{ matrix.os }} (stub)"

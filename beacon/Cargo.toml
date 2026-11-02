@@ -1,0 +1,13 @@
+[package]
+name = "beacon"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "beacon"
+path = "src/main.rs"
+
+[dependencies]
+mesh = { path = "../mesh" }
+anyhow.workspace = true
+tokio.workspace = true

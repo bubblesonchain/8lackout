@@ -1,0 +1,10 @@
+[toolchain]
+[features]
+seeds = false
+[programs.devnet]
+proof_of_aid = "AiD1111111111111111111111111111111111111111"
+receipts     = "Rcpt111111111111111111111111111111111111111"
+timeline     = "TimE111111111111111111111111111111111111111"
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
