@@ -14,6 +14,8 @@ An offline-first resilience network for blackouts, disasters, and war zones. Pho
 
 ## What it is
 
+https://8lackout.com/
+
 When the grid, the towers, or the internet go down, coordination dies first. 8LACKOUT assumes they're already off. It turns a pile of ordinary phones and a few cheap radios into a working command layer: people find each other, needs get matched to responders, aid is proven, and the record of what happened survives — all with no internet, no cell, no cloud.
 
 > Civilian infrastructure only. No targeting, no surveillance. It keeps people findable, aid accountable, and the truth timestamped when every normal system is down.
