@@ -1,0 +1,11 @@
+[Unit]
+Description=8LACKOUT beacon (store-and-forward + uplink reconciler)
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/beacon --solar --uplink auto
+Restart=always
+User=8lackout
+
+[Install]
+WantedBy=multi-user.target
