@@ -1,16 +1,15 @@
-target
-.env
-.vscode
-bin
-config.json
+# rust
+/target
+**/target
+# node
 node_modules
-./package-lock.json
-hfuzz_target
-hfuzz_workspace
-**/*.so
-**/.DS_Store
+dist
+.pnpm-store
+# anchor
+.anchor
 test-ledger
-docker-target
-.idea
-.coderrect
-.turbo
+# env / keys
+*.env
+.env*
+*.keypair.json
+id.json
