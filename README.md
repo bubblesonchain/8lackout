@@ -1,4 +1,4 @@
-# Ghost Perps playground
+# Pppercolator
 
 Paper perpetuals running on the unmodified [Percolator](https://github.com/aeyakovenko/percolator)
 risk engine by Anatoly Yakovenko, compiled to WebAssembly so it runs in a browser tab.
@@ -28,7 +28,8 @@ runs in the keeper crank. An earlier setup with one shared house account locked 
 after every engine liquidation, because the engine blocks new risk on a side it has scaled
 down until that side drains.
 
-Not done: funding rates are zero, prices are simulated, and nothing is on chain.
+Prices: live from Coinbase spot (crypto) and Jupiter's xStocks feed (stocks), with a random
+simulation as fallback. Not done: funding rates are zero and nothing is on chain.
 
 There is no official token.
 
