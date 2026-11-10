@@ -31,7 +31,8 @@ down until that side drains.
 Prices: live from Coinbase spot (crypto) and Jupiter's xStocks feed (stocks), with a random
 simulation as fallback. Not done: funding rates are zero and nothing is on chain.
 
-There is no official token.
+$PPP on Pump.fun (`Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump`) was launched by the Pppercolator team.
+It is a memecoin, gives no claim on this project, and is not connected to the Percolator author.
 
 ## Run the tests
 
