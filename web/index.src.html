@@ -115,7 +115,7 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
       <div class="pad"><canvas id="chart" width="1100" height="520" aria-label="Candle chart of the selected market"></canvas></div>
     </div>
     <div class="box a-ticket">
-      <h2>ORDER TICKET <span>0.10% fee</span></h2>
+      <h2>ORDER TICKET <span id="feeLbl">paper, 0.10% fee</span></h2>
       <div class="pad">
         <div class="seg" id="modeSeg" hidden style="margin-bottom:8px"><button type="button" id="mPaper" class="on long">Paper</button><button type="button" id="mReal" class="long">Real, beta</button></div>
         <div id="realBox" hidden class="realbox"><div id="rStat">Not connected.</div>
@@ -165,8 +165,11 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
           <div><span>Market cap</span><b id="cMc">loading</b></div>
           <div><span>Holders</span><b id="cH">loading</b></div>
           <div><span>Liquidity</span><b id="cL">loading</b></div>
+          <div><span>Site fees earned</span><b id="cF">n/a</b></div>
+          <div><span>Buybacks made</span><b>none yet</b></div>
         </div>
         <div class="dim" id="cNote" style="margin-top:8px;font-size:11.5px">Live from Jupiter. Not a price forecast.</div>
+        <div class="dim" style="margin-top:4px;font-size:11.5px">Site fees are the 0.03% builder fee on real orders, read live from Hyperliquid. Each buyback will be listed here with its transaction.</div>
         <div class="row"><a class="btn" href="https://pump.fun/coin/Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump" target="_blank" rel="noopener">Open on Pump.fun</a></div>
       </div>
     </div>
@@ -211,7 +214,7 @@ const U=1e6,BOTS=[1,2,3,4,5,6],TRADERS=7;
 let w,rnd,seed,tick=0,sel=0,side=1,paused=false,halted=false,acts=[],px=[],open0=[],nLiq=0,nRef=0,checks=0,timer=null,S=null;
 let candles=[],entry=[0,0,0,0,0,0];
 // Real mode: orders go from this browser to Hyperliquid, signed by a trading-only key the user approved. Shown only at #real until tested.
-const REAL_ON=location.hash==="#real"&&!!window.PPPHL,BUILDER="",BUILDER_F=30;let real=false,RA=null,pending=null,builderOk=false;const CANDLE=4,MM=0.05;
+const REAL_ON=location.hash==="#real"&&!!window.PPPHL,BUILDER="0x4bf1b0952d7011e6b6768ef4af4255a6534c0298",BUILDER_F=30;let real=false,RA=null,pending=null,builderOk=false,builderLive=false;const CANDLE=4,MM=0.05;
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const usd=s=>"$"+fmt(Number(s)/U);
@@ -325,13 +328,13 @@ async function refreshReal(){if(!real||!PPPHL.user())return;try{RA=await PPPHL.a
   const u=PPPHL.user();$("rStat").textContent=u?("Wallet "+u.slice(0,6)+"..."+u.slice(-4)+(PPPHL.hasAgent()?". Trading enabled in this browser.":". Enable trading to place orders: one signature, it creates a trading-only key that cannot withdraw.")+(RA&&parseFloat(RA.accountValue)<10?" Your Hyperliquid balance is under $10. Deposit USDC at app.hyperliquid.xyz first.":"")):"Not connected.";
   $("bConn").hidden=!!u;$("bEnable").hidden=!u||PPPHL.hasAgent();$("bOff").hidden=!PPPHL.hasAgent();render()}
 function setMode(r){real=r;pending=null;$("confirm").hidden=true;$("realBox").hidden=!r;$("mPaper").className="long"+(r?"":" on");$("mReal").className="long"+(r?" on":"");
-  $("mchip").textContent=r?"real money, Hyperliquid":"paper money";$("brk").hidden=r||live;$("bMode").hidden=r;$("bShare").hidden=r||live;
+  $("mchip").textContent=r?"real money, Hyperliquid":"paper money";$("feeLbl").textContent=r?"real, 0.03% site fee":"paper, 0.10% fee";$("brk").hidden=r||live;$("bMode").hidden=r;$("bShare").hidden=r||live;
   $("posEmpty").textContent="No open positions. Pick a market, set margin and leverage, and open one.";
   $("msg").textContent=r?"Real mode sends real orders to Hyperliquid from your own wallet. This site never holds your funds. Not available to US persons. Start small.":"Paper mode. Nothing here uses real funds.";
   if(r)refreshReal();else render()}
 function review(o){
   if(!PPPHL.hasAgent()){$("msg").textContent="Connect your wallet and enable trading first.";return}
-  pending=o;const p=px[MK.findIndex(m=>m[3]===o.coin)]/U||0,not=o.size*p,fee=BUILDER&&builderOk?not*BUILDER_F/100000:0;
+  pending=o;const p=px[MK.findIndex(m=>m[3]===o.coin)]/U||0,not=o.size*p,fee=BUILDER&&builderOk&&builderLive?not*BUILDER_F/100000:0;
   $("cText").textContent=(o.close?"CLOSE ":"")+(o.isBuy?"BUY ":"SELL ")+fmt(o.size,4)+" "+o.coin+" at market on Hyperliquid. About $"+fmt(not,0)+" notional"+(o.close?"":" at "+o.lev+"x cross")+". Up to 1% slippage."+(fee?" Site fee about $"+fmt(fee)+".":" No site fee.")+" This is a real order.";
   $("confirm").hidden=false}
 function render(){
@@ -393,7 +396,7 @@ $("bGo").onclick=()=>{const lev=+$("lev").value,v=amount()*lev;if(!v){$("msg").t
   review({coin:MK[sel][3],isBuy:side>0,size:v/(px[sel]/U),lev})};
 $("bCancel").onclick=()=>{pending=null;$("confirm").hidden=true};
 $("bSend").onclick=async()=>{const o=pending;if(!o)return;pending=null;$("confirm").hidden=true;$("msg").textContent="Sending order to Hyperliquid...";
-  try{const b=BUILDER&&builderOk?{b:BUILDER,f:BUILDER_F}:null;const r=o.close?await PPPHL.closePosition(o.coin,b):await PPPHL.marketOrder({coin:o.coin,isBuy:o.isBuy,size:o.size,leverage:o.lev,builder:b});
+  try{const b=BUILDER&&builderOk&&builderLive?{b:BUILDER,f:BUILDER_F}:null;const r=o.close?await PPPHL.closePosition(o.coin,b):await PPPHL.marketOrder({coin:o.coin,isBuy:o.isBuy,size:o.size,leverage:o.lev,builder:b});
     $("msg").textContent=r.filled?"Filled "+r.totalSz+" "+o.coin+" at $"+r.avgPx+" on Hyperliquid.":"Order was not filled. Nothing was traded.";log("REAL "+(o.isBuy?"buy ":"sell ")+o.coin+(r.filled?" filled "+r.totalSz+" at $"+r.avgPx:" not filled"),"you")}
   catch(e){$("msg").textContent="Hyperliquid rejected the order: "+e.message}
   refreshReal()};
@@ -403,6 +406,10 @@ $("bOff").onclick=()=>{PPPHL.disableTrading();refreshReal()};
 $("mPaper").onclick=()=>setMode(false);$("mReal").onclick=async()=>{if(!live&&!(await goLive())){$("msg").textContent="Real mode needs live prices, and they could not be reached.";return}if(!live)return;boot(Math.floor(Math.random()*2**31));setMode(true)};
 $("bDn").onclick=()=>user(["K",sel,-4]);$("bUp").onclick=()=>user(["K",sel,4]);$("bGap").onclick=()=>user(["K",sel,-30]);
 $("bCrash").onclick=()=>{for(let k=0;k<10&&!halted;k++){acts.push([tick,"K",sel,-4]);act(["K",sel,-4],true)}$("msg").textContent="Ten 4% drops in a row on "+MK[sel][0]+". Check the tape for margin calls.";render()};
+async function fees(){
+  try{const r=await hl({type:"referral",user:BUILDER}),s=await hl({type:"clearinghouseState",user:BUILDER});
+    builderLive=parseFloat(s.marginSummary.accountValue)>=100;$("cF").textContent="$"+fmt(parseFloat(r.builderRewards)||0)}catch(e){}
+}
 async function coin(){
   try{const j=await getJSON("https://lite-api.jup.ag/tokens/v2/search?query=Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump"),t=j.find(x=>x.id==="Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump");if(!t)throw 0;
     const big=v=>v>=1e6?"$"+fmt(v/1e6)+"M":v>=1e3?"$"+fmt(v/1e3,1)+"K":"$"+fmt(v,0);
@@ -448,7 +455,7 @@ $("bMode").onclick=async()=>{
   const r=readHash();if(!r)await goLive();
   boot(r?r.seed:Math.floor(Math.random()*2**31),r);
   if(!r&&!live)$("msg").textContent="Live prices could not be reached from this page, so prices are simulated. You start with $10,000 of paper money.";
-  coin();setInterval(()=>{if(!document.hidden)coin()},30000);
+  coin();fees();setInterval(()=>{if(!document.hidden){coin();fees()}},30000);
   if(REAL_ON){$("modeSeg").hidden=false;setInterval(()=>{if(!document.hidden)refreshReal()},4000)}
   timer=setInterval(()=>{if(paused||halted||document.hidden)return;if(live&&Date.now()-lastOk>15000){$("pmode").textContent="live prices stalled";return}if(live)$("pmode").textContent="live prices";step();render()},900);
 })().catch(e=>{$("msg").textContent="The engine failed to load in this browser: "+e.message});
