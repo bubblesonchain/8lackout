@@ -194,10 +194,11 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
     </div>
   </div>
   <div class="foot">
-    <p>Paper trading on live Hyperliquid prices. Built on Anatoly Yakovenko's <a href="https://github.com/aeyakovenko/percolator">Percolator</a> engine; independent project, not affiliated with him.</p>
+    <p>Real trading on Hyperliquid from your own wallet (beta), and paper trading on live prices. The paper mode runs on Anatoly Yakovenko's <a href="https://github.com/aeyakovenko/percolator">Percolator</a> engine; independent project, not affiliated with him.</p>
     <p>$PPP contract: <span class="ca" id="ca">Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump</span> <button class="ghost" id="bCa" type="button">Copy</button></p>
     <details><summary>How it works and what to know</summary>
-      <p>No real funds are held or moved here, and nothing here is audited. Prices, one-minute candles and funding rates come from Hyperliquid's public feed: its main perps for crypto and its XYZ market for stock perps. Your paper positions are marked to those prices; paper funding is not charged. If the feed cannot be reached, prices are a random simulation; the chip at the top says which.</p>
+      <p>Real mode: orders go from your browser to Hyperliquid, signed by a trading-only key you approve; it cannot withdraw. Your funds stay in your own Hyperliquid account and this site never holds them. A 0.03% site fee applies to real orders. Real mode covers SOL, BTC and ETH, is in beta, and is not available to US persons. Trading with leverage can lose your whole margin.</p>
+      <p>Paper mode: no real funds are involved, and nothing here is audited. Prices, one-minute candles and funding rates come from Hyperliquid's public feed: its main perps for crypto and its XYZ market for stock perps. Your paper positions are marked to those prices; paper funding is not charged. If the feed cannot be reached, prices are a random simulation; the chip at the top says which.</p>
       <p>Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Liquidation prices shown are estimates. The engine is Percolator at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes.</p>
       <p>$PPP on Pump.fun was launched by the Pppercolator team. It is a memecoin. It gives no claim on this site, its fees or the engine. Check the contract address before you buy; copies exist.</p>
     </details>
@@ -213,8 +214,8 @@ let live=false,latest=null,closed=[],poll=null,lastOk=0;
 const U=1e6,BOTS=[1,2,3,4,5,6],TRADERS=7;
 let w,rnd,seed,tick=0,sel=0,side=1,paused=false,halted=false,acts=[],px=[],open0=[],nLiq=0,nRef=0,checks=0,timer=null,S=null;
 let candles=[],entry=[0,0,0,0,0,0];
-// Real mode: orders go from this browser to Hyperliquid, signed by a trading-only key the user approved. Shown only at #real until tested.
-const REAL_ON=location.hash==="#real"&&!!window.PPPHL,BUILDER="0x4bf1b0952d7011e6b6768ef4af4255a6534c0298",BUILDER_F=30;let real=false,RA=null,pending=null,builderOk=false,builderLive=false;const CANDLE=4,MM=0.05;
+// Real mode: orders go from this browser to Hyperliquid, signed by a trading-only key the user approved. Beta.
+const REAL_ON=!!window.PPPHL,BUILDER="0x4bf1b0952d7011e6b6768ef4af4255a6534c0298",BUILDER_F=30;let real=false,RA=null,pending=null,builderOk=false,builderLive=false;const CANDLE=4,MM=0.05;
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
 const usd=s=>"$"+fmt(Number(s)/U);
