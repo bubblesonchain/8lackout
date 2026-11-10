@@ -89,6 +89,7 @@ td button{padding:3px 8px;font-size:11px}
 .log .liq{color:var(--down)}.log .you{color:var(--hot)}.log .ref{color:var(--dim)}
 .empty{color:var(--dim);padding:14px 10px}
 .foot{color:var(--dim);font-size:11.5px;max-width:90ch}
+.foot p{margin:0 0 6px}.foot summary{cursor:pointer;color:var(--amber);margin-bottom:6px}
 .foot a{color:var(--amber)}
 .ca{color:var(--amber);overflow-wrap:anywhere;user-select:all}
 a.btn{flex:1 1 auto;text-align:center;text-decoration:none;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--amber);padding:7px 10px}a.btn:hover{background:var(--amber);color:var(--ink)}
@@ -192,11 +193,13 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
     </div>
   </div>
   <div class="foot">
-    Paper money only. Nothing here is audited and nothing here holds or moves real funds.
-    In live mode, prices, one-minute candles and funding rates come from Hyperliquid's public feed: its main perps for crypto and its XYZ market for stock perps. Your paper positions are marked to those prices; paper funding is not charged. If the feed cannot be reached, prices are a random simulation; the chip at the top says which.
-    Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Liquidation prices shown are estimates.
-    The engine is <a href="https://github.com/aeyakovenko/percolator">Percolator</a> by Anatoly Yakovenko at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes. This is an independent project, not affiliated with or endorsed by him.
-    $PPP on Pump.fun was launched by the Pppercolator team. Contract: <span class="ca" id="ca">Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump</span> <button class="ghost" id="bCa" type="button">Copy</button> It is a memecoin. It gives no claim on this site, its fees or the engine, and it is not connected to Anatoly Yakovenko. Check the contract address before you buy; copies exist.
+    <p>Paper trading on live Hyperliquid prices. Built on Anatoly Yakovenko's <a href="https://github.com/aeyakovenko/percolator">Percolator</a> engine; independent project, not affiliated with him.</p>
+    <p>$PPP contract: <span class="ca" id="ca">Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump</span> <button class="ghost" id="bCa" type="button">Copy</button></p>
+    <details><summary>How it works and what to know</summary>
+      <p>No real funds are held or moved here, and nothing here is audited. Prices, one-minute candles and funding rates come from Hyperliquid's public feed: its main perps for crypto and its XYZ market for stock perps. Your paper positions are marked to those prices; paper funding is not charged. If the feed cannot be reached, prices are a random simulation; the chip at the top says which.</p>
+      <p>Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Liquidation prices shown are estimates. The engine is Percolator at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes.</p>
+      <p>$PPP on Pump.fun was launched by the Pppercolator team. It is a memecoin. It gives no claim on this site, its fees or the engine. Check the contract address before you buy; copies exist.</p>
+    </details>
   </div>
 </div>
 <script>
