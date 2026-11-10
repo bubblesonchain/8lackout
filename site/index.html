@@ -34,11 +34,11 @@ h1{font-family:var(--display);font-weight:400;font-size:34px;line-height:.9;marg
 .acct b{font-size:16px;font-weight:500;color:var(--hot);font-variant-numeric:tabular-nums}
 .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 .grid>*{min-width:0}
-.a-chart{order:1}.a-ticket{order:2}.a-pos{order:3}.a-mk{order:4}.a-chk{order:5}.a-tape{order:6}
+.a-chart{order:1}.a-ticket{order:2}.a-pos{order:3}.a-mk{order:4}.a-coin{order:5}.a-chk{order:6}.a-tape{order:7}
 @media(min-width:900px){
   .acct{grid-template-columns:repeat(4,minmax(0,1fr))}
-  .grid{grid-template-columns:230px minmax(0,1fr) 300px;grid-template-areas:"mk chart ticket" "mk pos ticket" "chk tape tape";grid-template-rows:auto 1fr auto;align-items:start}
-  .a-chart{grid-area:chart}.a-ticket{grid-area:ticket}.a-pos{grid-area:pos}.a-mk{grid-area:mk}.a-chk{grid-area:chk}.a-tape{grid-area:tape}
+  .grid{grid-template-columns:230px minmax(0,1fr) 300px;grid-template-areas:"mk chart ticket" "coin pos ticket" "chk tape tape";grid-template-rows:auto 1fr auto;align-items:start}
+  .a-chart{grid-area:chart}.a-ticket{grid-area:ticket}.a-pos{grid-area:pos}.a-mk{grid-area:mk}.a-coin{grid-area:coin}.a-chk{grid-area:chk}.a-tape{grid-area:tape}
   h1{font-size:40px}
 }
 .box{border:1px solid var(--line);background:var(--panel)}
@@ -91,6 +91,7 @@ td button{padding:3px 8px;font-size:11px}
 .foot{color:var(--dim);font-size:11.5px;max-width:90ch}
 .foot a{color:var(--amber)}
 .ca{color:var(--amber);overflow-wrap:anywhere;user-select:all}
+a.btn{flex:1 1 auto;text-align:center;text-decoration:none;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--amber);padding:7px 10px}a.btn:hover{background:var(--amber);color:var(--ink)}
 a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
 .foot button{padding:1px 8px;font-size:11px}
 .banner{border:2px solid var(--down);color:var(--down);padding:10px;font-family:var(--display);font-size:24px}
@@ -156,6 +157,19 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
     <div class="box a-mk">
       <h2>MARKETS</h2>
       <div class="scroll"><table><thead><tr><th>Market</th><th>Price</th><th>Session</th></tr></thead><tbody id="mk"></tbody></table></div>
+    </div>
+    <div class="box a-coin">
+      <h2>$PPP <span>team memecoin</span></h2>
+      <div class="pad">
+        <div class="kv" style="margin-top:0">
+          <div><span>Price</span><b id="cPx">loading</b></div>
+          <div><span>Market cap</span><b id="cMc">loading</b></div>
+          <div><span>Holders</span><b id="cH">loading</b></div>
+          <div><span>Liquidity</span><b id="cL">loading</b></div>
+        </div>
+        <div class="dim" id="cNote" style="margin-top:8px;font-size:11.5px">Live from Jupiter. Not a price forecast.</div>
+        <div class="row"><a class="btn" href="https://pump.fun/coin/Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump" target="_blank" rel="noopener">Open on Pump.fun</a></div>
+      </div>
     </div>
     <div class="box a-chk">
       <h2>SOLVENCY <span><b id="checks">0</b> passed</span></h2>
@@ -341,6 +355,14 @@ $("usd").oninput=()=>{if(S)ticket()};$("lev").oninput=()=>{if(S)ticket()};
 $("bGo").onclick=()=>{const v=amount()*(+$("lev").value);v?user([side>0?"L":"S",sel,v]):$("msg").textContent="Enter the margin to use first."};
 $("bDn").onclick=()=>user(["K",sel,-4]);$("bUp").onclick=()=>user(["K",sel,4]);$("bGap").onclick=()=>user(["K",sel,-30]);
 $("bCrash").onclick=()=>{for(let k=0;k<10&&!halted;k++){acts.push([tick,"K",sel,-4]);act(["K",sel,-4],true)}$("msg").textContent="Ten 4% drops in a row on "+MK[sel][0]+". Check the tape for margin calls.";render()};
+async function coin(){
+  try{const j=await getJSON("https://lite-api.jup.ag/tokens/v2/search?query=Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump"),t=j.find(x=>x.id==="Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump");if(!t)throw 0;
+    const big=v=>v>=1e6?"$"+fmt(v/1e6)+"M":v>=1e3?"$"+fmt(v/1e3,1)+"K":"$"+fmt(v,0);
+    $("cPx").textContent=t.usdPrice>0?"$"+t.usdPrice.toPrecision(3):"n/a";$("cMc").textContent=t.mcap>0?big(t.mcap):"n/a";
+    $("cH").textContent=t.holderCount>=0?fmt(t.holderCount,0):"n/a";$("cL").textContent=t.liquidity>0?big(t.liquidity):"n/a";
+    $("cNote").textContent="Live from Jupiter, updated "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})+". Not a price forecast."}
+  catch(e){if($("cPx").textContent==="loading"){["cPx","cMc","cH","cL"].forEach(k=>$(k).textContent="n/a");$("cNote").textContent="Coin data could not be reached from this page."}}
+}
 $("bCa").onclick=async()=>{const t=$("ca").textContent;try{await navigator.clipboard.writeText(t);$("bCa").textContent="Copied"}catch(e){const r=document.createRange();r.selectNodeContents($("ca"));const x=getSelection();x.removeAllRanges();x.addRange(r)}};
 $("bPause").onclick=()=>{paused=!paused;$("bPause").textContent=paused?"Resume":"Pause"};
 $("bReset").onclick=()=>{try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}boot(Math.floor(Math.random()*2**31))};
@@ -375,6 +397,7 @@ $("bMode").onclick=async()=>{
   const r=readHash();if(!r)await goLive();
   boot(r?r.seed:Math.floor(Math.random()*2**31),r);
   if(!r&&!live)$("msg").textContent="Live prices could not be reached from this page, so prices are simulated. You start with $10,000 of paper money.";
+  coin();setInterval(()=>{if(!document.hidden)coin()},30000);
   timer=setInterval(()=>{if(paused||halted||document.hidden)return;if(live&&Date.now()-lastOk>15000){$("pmode").textContent="live prices stalled";return}if(live)$("pmode").textContent="live prices";step();render()},900);
 })().catch(e=>{$("msg").textContent="The engine failed to load in this browser: "+e.message});
 </script>
