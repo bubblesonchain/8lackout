@@ -28,8 +28,8 @@ runs in the keeper crank. An earlier setup with one shared house account locked 
 after every engine liquidation, because the engine blocks new risk on a side it has scaled
 down until that side drains.
 
-Prices: live from Coinbase spot (crypto) and Jupiter's xStocks feed (stocks), with a random
-simulation as fallback. Not done: funding rates are zero and nothing is on chain.
+Prices, candles and funding rates: live from Hyperliquid's public info API (main perps for
+crypto, the XYZ market for stock perps), with a random simulation as fallback. Not done: funding rates are zero and nothing is on chain.
 
 $PPP on Pump.fun (`Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump`) was launched by the Pppercolator team.
 It is a memecoin, gives no claim on this project, and is not connected to the Percolator author.

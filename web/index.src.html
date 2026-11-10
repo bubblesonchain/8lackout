@@ -109,8 +109,8 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
   <div class="grid">
     <div class="box a-chart">
       <h2><span id="selname" style="font-family:var(--display);font-size:19px">SOL-PERP</span><span id="src">oracle price</span></h2>
-      <div class="quote"><span class="px" id="bigpx">$0</span><span id="chg" class="up">+0.00%</span><small>session</small><small id="hrs"></small></div>
-      <div class="pad"><canvas id="chart" width="1100" height="520" aria-label="Candle chart of the selected market this session"></canvas></div>
+      <div class="quote"><span class="px" id="bigpx">$0</span><span id="chg" class="up">+0.00%</span><small id="chgl">session</small><small id="hrs"></small></div>
+      <div class="pad"><canvas id="chart" width="1100" height="520" aria-label="Candle chart of the selected market"></canvas></div>
     </div>
     <div class="box a-ticket">
       <h2>ORDER TICKET <span>0.10% fee</span></h2>
@@ -146,7 +146,7 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
     </div>
     <div class="box a-mk">
       <h2>MARKETS</h2>
-      <div class="scroll"><table><thead><tr><th>Market</th><th>Price</th><th>Session</th></tr></thead><tbody id="mk"></tbody></table></div>
+      <div class="scroll"><table><thead><tr><th>Market</th><th>Price</th><th id="mkch">Session</th></tr></thead><tbody id="mk"></tbody></table></div>
     </div>
     <div class="box a-coin">
       <h2>$PPP <span>team memecoin</span></h2>
@@ -183,7 +183,7 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
   </div>
   <div class="foot">
     Paper money only. Nothing here is audited and nothing here holds or moves real funds.
-    In live mode, crypto prices come from Coinbase spot and stock prices from Jupiter's feed for the tokenized xStocks, which follows the real share price during US market hours and the on-chain token price after hours. If those cannot be reached, prices are a random simulation; the chip at the top says which.
+    In live mode, prices, one-minute candles and funding rates come from Hyperliquid's public feed: its main perps for crypto and its XYZ market for stock perps. Your paper positions are marked to those prices; paper funding is not charged. If the feed cannot be reached, prices are a random simulation; the chip at the top says which.
     Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Liquidation prices shown are estimates.
     The engine is <a href="https://github.com/aeyakovenko/percolator">Percolator</a> by Anatoly Yakovenko at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes. This is an independent project, not affiliated with or endorsed by him.
     $PPP on Pump.fun was launched by the Pppercolator team. Contract: <span class="ca" id="ca">Ho7iohoM6UN96yoxzBNzz9aXZpNW3AyUVuEmBdAQpump</span> <button class="ghost" id="bCa" type="button">Copy</button> It is a memecoin. It gives no claim on this site, its fees or the engine, and it is not connected to Anatoly Yakovenko. Check the contract address before you buy; copies exist.
@@ -191,9 +191,9 @@ a.chip{text-decoration:none}a.chip:hover{border-color:var(--amber)}
 </div>
 <script>
 const WASM_B64="__WASM__";
-// Live sources, both keyless: Coinbase spot for crypto, and Jupiter's price API for the verified
-// xStocks mints, which also reports the underlying share price.
-const MK=[["SOL",82,"cb","SOL-USD"],["BTC",73000,"cb","BTC-USD"],["ETH",2000,"cb","ETH-USD"],["NVDA",170,"jup","Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh"],["TSLA",377,"jup","XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB"],["AAPL",347,"jup","XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp"]];
+// Live source: Hyperliquid's public info API (keyless). Crypto perps from the main venue, stock perps from its XYZ market.
+const MK=[["SOL",82,"","SOL"],["BTC",73000,"","BTC"],["ETH",2000,"","ETH"],["NVDA",170,"xyz","xyz:NVDA"],["TSLA",377,"xyz","xyz:TSLA"],["AAPL",347,"xyz","xyz:AAPL"]];
+const HL="https://api.hyperliquid.xyz/info";let info=MK.map(()=>null),realC=MK.map(()=>null),realAt=MK.map(()=>0);
 let live=false,latest=null,closed=[],poll=null,lastOk=0;
 const U=1e6,BOTS=[1,2,3,4,5,6],TRADERS=7;
 let w,rnd,seed,tick=0,sel=0,side=1,paused=false,halted=false,acts=[],px=[],open0=[],nLiq=0,nRef=0,checks=0,timer=null,S=null;
@@ -297,11 +297,14 @@ function ticket(){
 function render(){
   S=state();const A=S.accounts[0];
   $("slot").textContent=S.slot;$("selname").textContent=MK[sel][0]+"-PERP";
-  const ch0=(px[sel]/open0[sel]-1)*100;$("bigpx").textContent=pf(px[sel]);const cg=$("chg");cg.textContent=(ch0>=0?"+":"")+fmt(ch0)+"%";cg.className=ch0>=0?"up":"down";
-  $("hrs").textContent=live&&closed[sel]?"after hours, token price":"";$("src").textContent=live?(MK[sel][2]==="cb"?"Coinbase spot":"Jupiter xStocks feed"):"simulated";
-  const tb=$("mk");tb.textContent="";
+  const chOf=i=>live&&info[i]&&info[i].prev>0?(px[i]/U/info[i].prev-1)*100:(px[i]/open0[i]-1)*100;
+  const ch0=chOf(sel);$("bigpx").textContent=pf(px[sel]);const cg=$("chg");cg.textContent=(ch0>=0?"+":"")+fmt(ch0)+"%";cg.className=ch0>=0?"up":"down";
+  const I=live?info[sel]:null;$("chgl").textContent=I?"24h":"session";
+  $("hrs").textContent=I?"funding "+(I.funding>=0?"+":"")+(I.funding*100).toFixed(4)+"%/h   24h vol $"+(I.vol>=1e9?fmt(I.vol/1e9)+"B":fmt(I.vol/1e6,1)+"M"):"";
+  $("src").textContent=live?"Hyperliquid mark price":"simulated";if(live)pullCandles(sel);
+  $("mkch").textContent=live?"24h":"Session";const tb=$("mk");tb.textContent="";
   MK.forEach((m,i)=>{const tr=document.createElement("tr");if(i===sel)tr.className="sel";tr.tabIndex=0;
-    const ch=(px[i]/open0[i]-1)*100;
+    const ch=chOf(i);
     [m[0],pf(px[i]),(ch>=0?"+":"")+fmt(ch)+"%"].forEach((t,k)=>{const td=document.createElement("td");td.textContent=t;if(k===2)td.className=ch>=0?"up":"down";tr.appendChild(td)});
     tr.onclick=()=>{sel=i;render()};tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sel=i;render()}};tb.appendChild(tr)});
   const pb=$("pos");pb.textContent="";let n=0,upnl=0;
@@ -322,7 +325,7 @@ function render(){
 function draw(){
   const c=$("chart"),g=c.getContext("2d"),W=c.width,H=c.height,cs=getComputedStyle(document.documentElement);
   const tok=n=>cs.getPropertyValue(n).trim(),up=tok("--up"),down=tok("--down"),line=tok("--line"),dim=tok("--dim"),amber=tok("--amber");
-  g.clearRect(0,0,W,H);const d=candles[sel]||[];if(!d.length)return;
+  g.clearRect(0,0,W,H);let d=candles[sel]||[];if(live&&realC[sel]){d=realC[sel].slice();const z=d[d.length-1],p=px[sel];d[d.length-1]={o:z.o,h:Math.max(z.h,p),l:Math.min(z.l,p),c:p}}if(!d.length)return;
   let lo=Math.min(...d.map(x=>x.l)),hi=Math.max(...d.map(x=>x.h));const e=entry[sel];if(e){lo=Math.min(lo,e);hi=Math.max(hi,e)}
   const pad=(hi-lo)*.1||hi*.002;lo-=pad;hi+=pad;
   const R=150,L=10,T=14,B=14,n=Math.max(d.length,40),cw=(W-L-R)/n,Y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
@@ -359,20 +362,23 @@ $("bReset").onclick=()=>{try{history.replaceState(null,"",location.pathname+loca
 $("bShare").onclick=async()=>{const h=shareHash();try{location.hash=h}catch(e){}const url=location.href.split("#")[0]+"#"+h;
   try{await navigator.clipboard.writeText(url);$("msg").textContent="Replay link copied. It replays this exact session."}catch(e){$("msg").textContent="Could not copy. The replay link is now in the address bar."}};
 async function getJSON(u){const c=new AbortController(),t=setTimeout(()=>c.abort(),5000);try{const r=await fetch(u,{signal:c.signal});if(!r.ok)throw new Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}}
+async function hl(body){const c=new AbortController(),t=setTimeout(()=>c.abort(),6000);try{const r=await fetch(HL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:c.signal});if(!r.ok)throw new Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}}
 async function pullPrices(){
   const v=latest?latest.slice():MK.map(()=>0);
-  const mints=MK.filter(m=>m[2]==="jup").map(m=>m[3]);
-  const jobs=[getJSON("https://lite-api.jup.ag/price/v3?ids="+mints.join(",")).then(j=>{MK.forEach((m,i)=>{if(m[2]!=="jup")return;const d=j[m[3]];if(!d)return;
-      const stale=d.stockData&&d.stockData.updatedAt?Date.now()-Date.parse(d.stockData.updatedAt)>20*60*1000:true;
-      const p=d.stockData&&d.stockData.price>0&&!stale?d.stockData.price:d.usdPrice;closed[i]=stale;if(p>0)v[i]=Math.round(p*U)})})];
-  MK.forEach((m,i)=>{if(m[2]==="cb")jobs.push(getJSON("https://api.coinbase.com/v2/prices/"+m[3]+"/spot").then(j=>{const p=parseFloat(j.data.amount);if(p>0)v[i]=Math.round(p*U)}))});
-  await Promise.allSettled(jobs);
+  await Promise.allSettled(["","xyz"].map(dex=>hl(dex?{type:"metaAndAssetCtxs",dex}:{type:"metaAndAssetCtxs"}).then(m=>{
+    MK.forEach((k,i)=>{if(k[2]!==dex)return;const j=m[0].universe.findIndex(x=>x.name===k[3]);if(j<0)return;const c=m[1][j],p=parseFloat(c.markPx);
+      if(p>0){v[i]=Math.round(p*U);info[i]={funding:parseFloat(c.funding),vol:parseFloat(c.dayNtlVlm),prev:parseFloat(c.prevDayPx),maxLev:m[0].universe[j].maxLeverage}}})})));
   if(!v.every(Boolean))throw new Error("missing price");
   latest=v;lastOk=Date.now()
 }
+async function pullCandles(i){
+  if(!live||Date.now()-realAt[i]<20000)return;realAt[i]=Date.now();
+  try{const now=Date.now(),j=await hl({type:"candleSnapshot",req:{coin:MK[i][3],interval:"1m",startTime:now-80*60000,endTime:now}});
+    if(Array.isArray(j)&&j.length){realC[i]=j.slice(-80).map(x=>({o:Math.round(x.o*U),h:Math.round(x.h*U),l:Math.round(x.l*U),c:Math.round(x.c*U)}));if(i===sel)draw()}}catch(e){}
+}
 async function goLive(){
   try{await pullPrices();live=true;
-    clearInterval(poll);poll=setInterval(()=>{pullPrices().catch(()=>{})},4000);return true}
+    clearInterval(poll);poll=setInterval(()=>{pullPrices().catch(()=>{})},3000);return true}
   catch(e){live=false;return false}
 }
 $("bMode").onclick=async()=>{
