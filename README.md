@@ -14,6 +14,8 @@ Not audited. Do not use with real funds." That applies to this repo too.
 - `sim/` is a thin wrapper. It holds the accounts, feeds prices and moves paper tokens.
   Every risk decision (margin, liquidation, fees, loss handling) is made by the engine.
 - `web/index.src.html` is the terminal page. `__WASM__` is replaced with the base64 of the build.
+- `hl/` is the Hyperliquid client (wallet connect, trading-only agent key, market orders), bundled by CI
+  into `dist/hl.js` from pinned dependencies. `__HLJS__` in the page is replaced with that bundle.
 - `dist/sim.wasm` is built by CI from the two directories above.
 
 ## Status
