@@ -1,0 +1,279 @@
+<title>Ghost Perps</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one 1975 amber trading terminal. Status strip on top, markets left, order desk right, tape and log below. Single dark look by choice. */
+:root{
+  color-scheme:dark;
+  --tube:#120c04; --panel:#1b1206; --line:#4a3310; --dim:#9a6c1c; --amber:#ffb000; --hot:#ffd76a;
+  --up:#9be564; --down:#ff6b4a; --ink:#120c04;
+  --display:"VT323","IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--tube)}
+body{color:var(--amber);font-family:var(--mono);font-size:13px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 28px;
+  background:radial-gradient(120% 80% at 50% 0%,#1f1507 0%,var(--tube) 70%)}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+h1{font-family:var(--display);font-weight:400;font-size:44px;line-height:.9;margin:0;letter-spacing:2px;color:var(--hot);text-shadow:0 0 14px rgba(255,176,0,.45)}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 18px;justify-content:space-between}
+.sub{color:var(--dim);max-width:60ch}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);padding:2px 8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.chip b{color:var(--amber);font-weight:500}
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px}
+@media(max-width:780px){.grid{grid-template-columns:minmax(0,1fr)}h1{font-size:36px}}
+.box{border:1px solid var(--line);background:var(--panel);min-width:0}
+.box>h2{font-family:var(--display);font-weight:400;font-size:20px;letter-spacing:1px;margin:0;padding:3px 10px;background:var(--amber);color:var(--ink);display:flex;justify-content:space-between;gap:8px}
+.box>h2 span{font-family:var(--mono);font-size:11px;align-self:center}
+.pad{padding:10px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:right;font-weight:400;color:var(--dim);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-bottom:1px solid var(--line)}
+td{text-align:right;padding:6px 10px;border-bottom:1px dashed #33230b;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:#24180a}
+tr.sel td{background:#2c1d0a;color:var(--hot)}
+tr.sel td:first-child::before{content:"> "}
+.up{color:var(--up)}.down{color:var(--down)}.dim{color:var(--dim)}
+.scroll{overflow-x:auto}
+canvas{display:block;width:100%;height:120px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;font-variant-numeric:tabular-nums}
+.stats div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed #33230b;padding-bottom:3px}
+.stats span{color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.health{height:10px;border:1px solid var(--line);margin-top:10px;position:relative}
+.health i{position:absolute;inset:0 auto 0 0;background:var(--up);width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+label{color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+input{background:var(--tube);border:1px solid var(--line);color:var(--hot);font:inherit;padding:7px 8px;width:9ch;flex:1 1 9ch;min-width:0}
+button{font:inherit;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:transparent;color:var(--amber);border:1px solid var(--amber);padding:7px 10px;cursor:pointer;flex:1 1 auto}
+button:hover{background:var(--amber);color:var(--ink)}
+button:focus-visible,input:focus-visible,tbody tr:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+button.long{border-color:var(--up);color:var(--up)}button.long:hover{background:var(--up);color:var(--ink)}
+button.short{border-color:var(--down);color:var(--down)}button.short:hover{background:var(--down);color:var(--ink)}
+button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
+.msg{min-height:1.5em;margin-top:8px;color:var(--hot)}
+.lamps{display:flex;flex-wrap:wrap;gap:8px 16px}
+.lamp{display:flex;align-items:center;gap:6px}
+.lamp i{width:10px;height:10px;border-radius:50%;background:var(--up);box-shadow:0 0 8px var(--up)}
+.lamp.bad i{background:var(--down);box-shadow:0 0 8px var(--down)}
+.log{height:190px;overflow-y:auto;padding:8px 10px;font-size:12px}
+.log div{white-space:pre-wrap;overflow-wrap:anywhere}
+.log .liq{color:var(--down)}.log .you{color:var(--hot)}.log .ref{color:var(--dim)}
+.foot{color:var(--dim);font-size:11.5px;max-width:80ch}
+.foot a{color:var(--amber)}
+.banner{border:2px solid var(--down);color:var(--down);padding:10px;font-family:var(--display);font-size:24px}
+@media(prefers-reduced-motion:reduce){body::after{display:none}}
+</style>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>GHOST PERPS</h1>
+      <div class="sub">Paper perpetuals on crypto and stocks. Every margin check and liquidation on this screen is decided by the Percolator risk engine, running unmodified in your browser.</div>
+    </div>
+    <div class="chips">
+      <span class="chip">engine <b>percolator@37cb14e</b></span>
+      <span class="chip"><b>paper money</b></span>
+      <span class="chip"><b>simulated prices</b></span>
+      <span class="chip">slot <b id="slot">0</b></span>
+    </div>
+  </div>
+  <div id="broken" class="banner" hidden>INVARIANT BROKEN. Simulation halted. Copy the replay link and report it.</div>
+  <div class="grid">
+    <div class="box">
+      <h2>MARKETS <span>tap a row to select</span></h2>
+      <div class="scroll"><table><thead><tr><th>Market</th><th>Price</th><th>Session</th><th>Open interest</th><th>Your size</th></tr></thead><tbody id="mk"></tbody></table></div>
+      <div class="pad"><canvas id="chart" width="900" height="240" aria-label="Price of the selected market this session"></canvas></div>
+    </div>
+    <div class="box">
+      <h2>ORDER DESK <span id="selname">SOL-PERP</span></h2>
+      <div class="pad">
+        <div class="stats">
+          <div><span>Equity</span><b id="eq">0</b></div>
+          <div><span>Deposited</span><b id="cap">0</b></div>
+          <div><span>Margin in use</span><b id="im">0</b></div>
+          <div><span>Liquidation line</span><b id="mm">0</b></div>
+        </div>
+        <div class="health" title="Equity above the liquidation line"><i id="hbar"></i></div>
+        <div class="row">
+          <label for="usd">Size in USD</label>
+          <input id="usd" inputmode="decimal" value="20000">
+          <button class="long" id="bLong" type="button">Long</button>
+          <button class="short" id="bShort" type="button">Short</button>
+          <button id="bClose" type="button">Close</button>
+        </div>
+        <div class="msg" id="msg">You start with $10,000 of paper money. The engine allows up to 10x.</div>
+        <div class="row">
+          <label>Break it</label>
+          <button class="ghost" id="bDn" type="button">Shock -4%</button>
+          <button class="ghost" id="bUp" type="button">Shock +4%</button>
+          <button class="ghost" id="bCrash" type="button">Crash x10</button>
+          <button class="ghost" id="bGap" type="button">Try -30% gap</button>
+        </div>
+        <div class="row">
+          <button class="ghost" id="bPause" type="button">Pause</button>
+          <button class="ghost" id="bReset" type="button">New session</button>
+          <button class="ghost" id="bShare" type="button">Copy replay link</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="box">
+      <h2>SOLVENCY CHECKS <span><b id="checks">0</b> passed</span></h2>
+      <div class="pad">
+        <div class="lamps">
+          <div class="lamp" id="l1"><i></i>Every paper dollar accounted for</div>
+          <div class="lamp" id="l2"><i></i>Vault covers all balances and insurance</div>
+          <div class="lamp" id="l3"><i></i>Engine state valid</div>
+        </div>
+        <div class="stats" style="margin-top:10px">
+          <div><span>Vault</span><b id="vault">0</b></div>
+          <div><span>Insurance fund</span><b id="ins">0</b></div>
+          <div><span>Liquidations</span><b id="nliq">0</b></div>
+          <div><span>Refused by engine</span><b id="nref">0</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="box">
+      <h2>TAPE <span>you, six bots and the keeper</span></h2>
+      <div class="log" id="log" aria-live="off"></div>
+    </div>
+  </div>
+  <div class="foot">
+    Paper money only. Prices are a random simulation, not live quotes. Nothing here is audited and nothing here holds or moves real funds.
+    The engine is <a href="https://github.com/aeyakovenko/percolator">Percolator</a> by Anatoly Yakovenko at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes. This page is not affiliated with or endorsed by its author.
+    There is no official token.
+  </div>
+</div>
+<script>
+const WASM_B64="__WASM__";
+const MK=[["SOL",150],["BTC",100000],["ETH",3000],["NVDA",140],["TSLA",350],["AAPL",230]];
+const U=1e6,LP=7,BOTS=[1,2,3,4,5,6];
+let w,rnd,seed,tick=0,sel=0,paused=false,halted=false,acts=[],hist=[],px=[],open0=[],nLiq=0,nRef=0,checks=0,timer=null,S=null;
+const $=id=>document.getElementById(id);
+const fmt=(n,d=2)=>n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const usd=s=>"$"+fmt(Number(s)/U);
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function state(){const p=w.sim_state(),n=w.sim_state_len();return JSON.parse(new TextDecoder().decode(new Uint8Array(w.memory.buffer,p,n)))}
+function log(t,c){const l=$("log"),d=document.createElement("div");if(c)d.className=c;d.textContent=String(tick).padStart(5,"0")+"  "+t;l.prepend(d);while(l.childElementCount>120)l.lastChild.remove()}
+function qFor(i,dollars){return BigInt(Math.round(dollars*U*U/px[i]))}
+function who(a){return a===0?"YOU":"BOT-"+a}
+function trade(a,i,q,quiet){
+  const ok=w.sim_trade(a,LP,i,q,10n);
+  if(!ok){nRef++;const e=state().err;if(!quiet)log(who(a)+" order refused by engine ("+e+")","ref");return e}
+  return ""
+}
+function setPrice(i,p){p=Math.max(1,Math.round(p));if(w.sim_set_price(i,BigInt(p),0n)){px[i]=p;return ""}nRef++;return state().err}
+function keeper(){
+  S=state();
+  for(const a of [0,...BOTS]){const A=S.accounts[a];
+    if(!A.pos.some(x=>x!=="0"))continue;
+    if(BigInt(A.equity)>=BigInt(A.mm))continue;
+    for(let i=0;i<MK.length;i++){if(A.pos[i]==="0")continue;
+      const before=A.pos[i];
+      if(w.sim_liquidate(a,i)){nLiq++;const after=state().accounts[a].pos[i];
+        log("LIQUIDATED "+who(a)+" "+MK[i][0]+"  "+(after==="0"?"full close":"partial, "+fmt(Math.abs(Number(before)-Number(after))/U,3)+" units"),a===0?"liq you":"liq")}}
+  }
+}
+function bots(){
+  S=state();
+  for(const b of BOTS){const A=S.accounts[b],r=rnd();
+    const has=A.pos.findIndex(x=>x!=="0");
+    if(has<0){
+      if(Number(A.capital)<200*U){if(rnd()<.2){w.sim_deposit(b,BigInt(5000*U));log("BOT-"+b+" reloads $5,000")}continue}
+      if(r<.22){const i=Math.floor(rnd()*MK.length),lev=3+rnd()*6,dir=rnd()<.5?1n:-1n;
+        const d=Number(A.equity)/U*lev,q=qFor(i,d)*dir;
+        if(!trade(b,i,q,true))log("BOT-"+b+" "+(dir>0n?"long ":"short ")+MK[i][0]+" $"+fmt(d,0)+" at "+fmt(lev,1)+"x")}
+    }else if(r<.07){if(!trade(b,has,-BigInt(A.pos[has]),true))log("BOT-"+b+" closes "+MK[has][0])}
+  }
+}
+function check(){
+  S=state();const v=S.inv;
+  $("l1").classList.toggle("bad",!v.conserved);$("l2").classList.toggle("bad",!v.covered);$("l3").classList.toggle("bad",!v.shape);
+  if(v.conserved&&v.covered&&v.shape)checks++;else{halted=true;$("broken").hidden=false;log("INVARIANT BROKEN","liq")}
+}
+function step(){
+  tick++;
+  for(let i=0;i<MK.length;i++){
+    const trend=Math.sin((tick+i*37)/45)*0.0025, r=(rnd()-.5)*0.03+trend;
+    setPrice(i,px[i]*(1+Math.max(-.035,Math.min(.035,r))));
+  }
+  hist.push(px.slice());if(hist.length>240)hist.shift();
+  keeper();bots();keeper();check();
+}
+function act(a,silent){ // a=[code,asset,value]
+  const [c,i,v]=a;let e="";
+  if(c==="L"||c==="S"){e=trade(0,i,qFor(i,v)*(c==="L"?1n:-1n),true);if(!e)log("YOU "+(c==="L"?"long ":"short ")+MK[i][0]+" $"+fmt(v,0),"you")}
+  else if(c==="C"){const p=state().accounts[0].pos[i];if(p!=="0"){e=trade(0,i,-BigInt(p),true);if(!e)log("YOU close "+MK[i][0],"you")}}
+  else if(c==="K"){e=setPrice(i,px[i]+Math.sign(v)*Math.floor(px[i]*Math.abs(v)/100));log("SHOCK "+MK[i][0]+" "+(v>0?"+":"")+v+"%"+(e?"  refused by engine ("+e+")":""),e?"ref":"you");if(!e){keeper();check()}}
+  if(!silent){
+    if(e)$("msg").textContent=c==="K"?"The engine refused that price move ("+e+"). It only accepts moves it can prove are covered by margin.":"The engine refused that order ("+e+"). It was more than your margin allows.";
+    else $("msg").textContent=c==="K"?"Price moved. The keeper liquidates any account under the line.":"Order filled at the oracle price.";
+  }
+  return e
+}
+function user(a){if(halted)return;acts.push([tick,...a]);act(a);render()}
+function boot(sd,replay){
+  seed=sd>>>0;rnd=mulberry(seed);tick=0;acts=[];hist=[];nLiq=0;nRef=0;checks=0;halted=false;$("broken").hidden=true;$("log").textContent="";
+  px=MK.map(m=>m[1]*U);open0=px.slice();
+  w.sim_init(...px.map(p=>BigInt(p)),1000n,500n,50n,400n);
+  w.sim_deposit(0,BigInt(10000*U));for(const b of BOTS)w.sim_deposit(b,BigInt(5000*U));w.sim_deposit(LP,BigInt(5000000*U));
+  hist.push(px.slice());
+  if(replay){let k=0;const end=replay.end;
+    while(tick<end){while(k<replay.acts.length&&replay.acts[k][0]===tick){const a=replay.acts[k++];acts.push(a);act(a.slice(1),true)}step();if(halted)break}
+    while(k<replay.acts.length){const a=replay.acts[k++];acts.push(a);act(a.slice(1),true)}
+    $("msg").textContent="Replayed a shared session of "+end+" slots. It is live again from here."}
+  else{for(let i=0;i<40;i++)step();$("msg").textContent="You start with $10,000 of paper money. The engine allows up to 10x."}
+  render()
+}
+function render(){
+  S=state();const A=S.accounts[0];
+  $("slot").textContent=S.slot;$("selname").textContent=MK[sel][0]+"-PERP";
+  const tb=$("mk");tb.textContent="";
+  MK.forEach((m,i)=>{const tr=document.createElement("tr");if(i===sel)tr.className="sel";tr.tabIndex=0;
+    const ch=(px[i]/open0[i]-1)*100,oi=Number(S.assets[i].oi_long)/U*px[i]/U,my=Number(A.pos[i])/U;
+    const cells=[m[0],"$"+fmt(px[i]/U,px[i]>=1000*U?0:2),(ch>=0?"+":"")+fmt(ch)+"%","$"+fmt(oi,0),my?((my>0?"+":"")+fmt(my,3)):"0"];
+    cells.forEach((t,k)=>{const td=document.createElement("td");td.textContent=t;if(k===2)td.className=ch>=0?"up":"down";if(k===4&&my)td.className=my>0?"up":"down";tr.appendChild(td)});
+    tr.onclick=()=>{sel=i;render()};tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sel=i;render()}};tb.appendChild(tr)});
+  $("eq").textContent=usd(A.equity);$("cap").textContent=usd(A.capital);$("im").textContent=usd(A.im);$("mm").textContent=usd(A.mm);
+  const eq=Number(A.equity),mm=Number(A.mm),im=Number(A.im);
+  const h=im>0?Math.max(0,Math.min(1,(eq-mm)/(im*2-mm||1))):1;const hb=$("hbar");hb.style.width=(h*100)+"%";hb.style.background=h<.25?"var(--down)":h<.5?"var(--amber)":"var(--up)";
+  $("vault").textContent=usd(S.vault);$("ins").textContent=usd(S.insurance);$("nliq").textContent=nLiq;$("nref").textContent=nRef;$("checks").textContent=checks;
+  draw()
+}
+function draw(){
+  const c=$("chart"),g=c.getContext("2d"),W=c.width,H=c.height,cs=getComputedStyle(document.documentElement);
+  const amber=cs.getPropertyValue("--amber").trim(),line=cs.getPropertyValue("--line").trim(),dim=cs.getPropertyValue("--dim").trim();
+  g.clearRect(0,0,W,H);const ys=hist.map(h=>h[sel]);if(ys.length<2)return;
+  let lo=Math.min(...ys),hi=Math.max(...ys);const pad=(hi-lo)*.12||1;lo-=pad;hi+=pad;
+  const X=k=>8+k/(ys.length-1)*(W-90),Y=v=>H-8-(v-lo)/(hi-lo)*(H-16);
+  g.strokeStyle=line;g.lineWidth=1;g.setLineDash([3,5]);for(let k=0;k<=3;k++){const y=8+k*(H-16)/3;g.beginPath();g.moveTo(8,y);g.lineTo(W-82,y);g.stroke()}
+  g.setLineDash([]);g.beginPath();ys.forEach((v,k)=>k?g.lineTo(X(k),Y(v)):g.moveTo(X(k),Y(v)));g.strokeStyle=amber;g.lineWidth=2.5;g.shadowColor=amber;g.shadowBlur=8;g.stroke();g.shadowBlur=0;
+  const last=ys[ys.length-1];g.fillStyle=amber;g.beginPath();g.arc(X(ys.length-1),Y(last),5,0,7);g.fill();
+  g.font="22px 'IBM Plex Mono',monospace";g.fillStyle=dim;g.textAlign="left";
+  g.fillText(fmt(hi/U,hi>=1000*U?0:2),W-78,22);g.fillText(fmt(lo/U,lo>=1000*U?0:2),W-78,H-10);
+  g.fillStyle=amber;g.fillText(fmt(last/U,last>=1000*U?0:2),W-78,Math.max(46,Math.min(H-34,Y(last)+7)))
+}
+const hex=s=>Array.from(new TextEncoder().encode(s),b=>b.toString(16).padStart(2,"0")).join("");
+const unhex=h=>new TextDecoder().decode(new Uint8Array(h.match(/../g).map(x=>parseInt(x,16))));
+function shareHash(){return "r"+hex(JSON.stringify({s:seed,e:tick,a:acts}))}
+function readHash(){try{const h=location.hash.slice(1);if(h[0]!=="r"||h.length<8)return null;const o=JSON.parse(unhex(h.slice(1)));if(typeof o.s!=="number"||!Array.isArray(o.a)||o.e>20000)return null;return{seed:o.s,end:o.e,acts:o.a}}catch(e){return null}}
+function amount(){const v=parseFloat(String($("usd").value).replace(/[^0-9.]/g,""));return v>0?Math.min(v,5e6):0}
+$("bLong").onclick=()=>{const v=amount();v?user(["L",sel,v]):$("msg").textContent="Enter a size in USD first."};
+$("bShort").onclick=()=>{const v=amount();v?user(["S",sel,v]):$("msg").textContent="Enter a size in USD first."};
+$("bClose").onclick=()=>{state().accounts[0].pos[sel]==="0"?$("msg").textContent="You have no "+MK[sel][0]+" position to close.":user(["C",sel,0])};
+$("bDn").onclick=()=>user(["K",sel,-4]);$("bUp").onclick=()=>user(["K",sel,4]);$("bGap").onclick=()=>user(["K",sel,-30]);
+$("bCrash").onclick=()=>{for(let k=0;k<10&&!halted;k++){acts.push([tick,"K",sel,-4]);act(["K",sel,-4],true)}$("msg").textContent="Ten 4% drops in a row on "+MK[sel][0]+". Check the tape for liquidations.";render()};
+$("bPause").onclick=()=>{paused=!paused;$("bPause").textContent=paused?"Resume":"Pause"};
+$("bReset").onclick=()=>{try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}boot(Math.floor(Math.random()*2**31))};
+$("bShare").onclick=async()=>{const h=shareHash();try{location.hash=h}catch(e){}const url=location.href.split("#")[0]+"#"+h;
+  try{await navigator.clipboard.writeText(url);$("msg").textContent="Replay link copied. It replays this exact session."}catch(e){$("msg").textContent="Could not copy. The replay link is now in the address bar."}};
+(async()=>{
+  const bin=Uint8Array.from(atob(WASM_B64),c=>c.charCodeAt(0));
+  w=(await WebAssembly.instantiate(bin,{})).instance.exports;
+  const r=readHash();boot(r?r.seed:Math.floor(Math.random()*2**31),r);
+  timer=setInterval(()=>{if(paused||halted||document.hidden)return;step();render()},900);
+})().catch(e=>{$("msg").textContent="The engine failed to load in this browser: "+e.message});
+</script>

@@ -9,14 +9,16 @@ fn round_trip_and_liquidation() {
     // 10x long: 50 units of asset 0 at $150 = $7,500 notional on $1,000
     assert!(s.trade(0, 7, 0, 50 * Q, 10), "trade: {}", s.last_error);
     assert!(!s.trade(0, 7, 0, 500 * Q, 10), "over-leverage must be refused");
-    println!("{}", s.state_json());
+    { let mut o = String::new(); s.write_state(&mut o); println!("{}", &o[..300]); }
     let mut p = 150 * U;
     for _ in 0..4 { p = p * 97 / 100; assert!(s.set_price(0, p, 0), "price: {}", s.last_error); }
-    println!("{}", s.state_json());
+    { let mut o = String::new(); s.write_state(&mut o); println!("{}", &o[..300]); }
+    assert!(s.deposit(1, 5_000 * U as u128));
+    assert!(s.trade(1, 7, 2, Q, 10), "trade after price moves: {}", s.last_error);
     let l = s.liquidate(0, 0);
     println!("liq {:?} {}", l, s.last_error);
     assert!(l.is_some());
     let (a, b, c) = s.invariants();
     assert!(a && b && c);
-    println!("{}", s.state_json());
+    { let mut o = String::new(); s.write_state(&mut o); println!("{}", &o[..300]); }
 }
