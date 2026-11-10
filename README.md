@@ -18,13 +18,17 @@ Not audited. Do not use with real funds." That applies to this repo too.
 
 ## Status
 
-Work in progress. Deposits, trades, the 10x margin check, partial liquidation, fees to
-insurance and the three solvency checks all work, and the solvency checks hold across the
-soak test. Known gap: after a liquidation the engine scales the opposite side down and
-blocks new risk in that market until that side has drained. With a single house account on
-the other side of every trade the market stays locked, so most orders are refused after the
-first liquidations. The wrapper's market setup needs to change; the engine is behaving as
-specified.
+Working: deposits, trades, the 10x margin check, margin calls, fees to insurance, and three
+solvency checks that hold across a 600-slot soak test with the market staying active.
+
+Market setup (wrapper policy, not engine rules): each trader faces a dedicated house account.
+When the engine certifies a trader below maintenance margin, the house closes the position
+at the oracle price as an ordinary trade. If the engine refuses that, its own liquidation
+runs in the keeper crank. An earlier setup with one shared house account locked markets
+after every engine liquidation, because the engine blocks new risk on a side it has scaled
+down until that side drains.
+
+Not done: funding rates are zero, prices are simulated, and nothing is on chain.
 
 There is no official token.
 

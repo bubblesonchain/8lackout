@@ -131,18 +131,18 @@ button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
         <div class="stats" style="margin-top:10px">
           <div><span>Vault</span><b id="vault">0</b></div>
           <div><span>Insurance fund</span><b id="ins">0</b></div>
-          <div><span>Liquidations</span><b id="nliq">0</b></div>
+          <div><span>Margin calls</span><b id="nliq">0</b></div>
           <div><span>Refused by engine</span><b id="nref">0</b></div>
         </div>
       </div>
     </div>
     <div class="box">
-      <h2>TAPE <span>you, six bots and the keeper</span></h2>
+      <h2>TAPE <span>you, six bots and the house</span></h2>
       <div class="log" id="log" aria-live="off"></div>
     </div>
   </div>
   <div class="foot">
-    Paper money only. Prices are a random simulation, not live quotes. Nothing here is audited and nothing here holds or moves real funds.
+    Paper money only. Prices are a random simulation, not live quotes. Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Nothing here is audited and nothing here holds or moves real funds.
     The engine is <a href="https://github.com/aeyakovenko/percolator">Percolator</a> by Anatoly Yakovenko at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes. This page is not affiliated with or endorsed by its author.
     There is no official token.
   </div>
@@ -150,7 +150,7 @@ button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
 <script>
 const WASM_B64="__WASM__";
 const MK=[["SOL",150],["BTC",100000],["ETH",3000],["NVDA",140],["TSLA",350],["AAPL",230]];
-const U=1e6,LP=7,BOTS=[1,2,3,4,5,6];
+const U=1e6,BOTS=[1,2,3,4,5,6],TRADERS=7;
 let w,rnd,seed,tick=0,sel=0,paused=false,halted=false,acts=[],hist=[],px=[],open0=[],nLiq=0,nRef=0,checks=0,timer=null,S=null;
 const $=id=>document.getElementById(id);
 const fmt=(n,d=2)=>n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -161,22 +161,19 @@ function log(t,c){const l=$("log"),d=document.createElement("div");if(c)d.classN
 function qFor(i,dollars){return BigInt(Math.round(dollars*U*U/px[i]))}
 function who(a){return a===0?"YOU":"BOT-"+a}
 function trade(a,i,q,quiet){
-  const ok=w.sim_trade(a,LP,i,q,10n);
+  const ok=w.sim_trade(a,i,q,10n);
   if(!ok){nRef++;const e=state().err;if(!quiet)log(who(a)+" order refused by engine ("+e+")","ref");return e}
   return ""
 }
-function setPrice(i,p){p=Math.max(1,Math.round(p));if(w.sim_set_price(i,BigInt(p),0n)){px[i]=p;return ""}nRef++;return state().err}
-function keeper(){
-  S=state();
-  for(const a of [0,...BOTS]){const A=S.accounts[a];
-    if(!A.pos.some(x=>x!=="0"))continue;
-    if(BigInt(A.equity)>=BigInt(A.mm))continue;
-    for(let i=0;i<MK.length;i++){if(A.pos[i]==="0")continue;
-      const before=A.pos[i];
-      if(w.sim_liquidate(a,i)){nLiq++;const after=state().accounts[a].pos[i];
-        log("LIQUIDATED "+who(a)+" "+MK[i][0]+"  "+(after==="0"?"full close":"partial, "+fmt(Math.abs(Number(before)-Number(after))/U,3)+" units"),a===0?"liq you":"liq")}}
-  }
+function setPrice(i,p){const n=px.slice();n[i]=Math.max(1,Math.round(p));return tickTo(n)}
+function report(before){
+  const tk=w.sim_last_takeover(),lq=w.sim_last_crank();if(!tk&&!lq)return;
+  const after=state();
+  for(let a=0;a<TRADERS;a++){const bit=1<<a;if(!((tk|lq)&bit))continue;
+    const moved=MK.map((m,i)=>before.accounts[a].pos[i]!==after.accounts[a].pos[i]?m[0]:null).filter(Boolean).join(" ");
+    nLiq++;log((lq&bit?"ENGINE LIQUIDATED ":"MARGIN CALL, HOUSE CLOSED ")+who(a)+(moved?"  "+moved:""),a===0?"liq you":"liq")}
 }
+function tickTo(next){const before=state();if(!w.sim_tick(...next.map(p=>BigInt(p)))){nRef++;return state().err}px=next;report(before);return ""}
 function bots(){
   S=state();
   for(const b of BOTS){const A=S.accounts[b],r=rnd();
@@ -196,21 +193,19 @@ function check(){
 }
 function step(){
   tick++;
-  for(let i=0;i<MK.length;i++){
-    const trend=Math.sin((tick+i*37)/45)*0.0025, r=(rnd()-.5)*0.03+trend;
-    setPrice(i,px[i]*(1+Math.max(-.035,Math.min(.035,r))));
-  }
+  const next=px.map((p,i)=>{const trend=Math.sin((tick+i*37)/45)*0.0025,r=(rnd()-.5)*0.03+trend;return Math.max(1,Math.round(p*(1+Math.max(-.035,Math.min(.035,r)))))});
+  tickTo(next);
   hist.push(px.slice());if(hist.length>240)hist.shift();
-  keeper();bots();keeper();check();
+  bots();check();
 }
 function act(a,silent){ // a=[code,asset,value]
   const [c,i,v]=a;let e="";
   if(c==="L"||c==="S"){e=trade(0,i,qFor(i,v)*(c==="L"?1n:-1n),true);if(!e)log("YOU "+(c==="L"?"long ":"short ")+MK[i][0]+" $"+fmt(v,0),"you")}
   else if(c==="C"){const p=state().accounts[0].pos[i];if(p!=="0"){e=trade(0,i,-BigInt(p),true);if(!e)log("YOU close "+MK[i][0],"you")}}
-  else if(c==="K"){e=setPrice(i,px[i]+Math.sign(v)*Math.floor(px[i]*Math.abs(v)/100));log("SHOCK "+MK[i][0]+" "+(v>0?"+":"")+v+"%"+(e?"  refused by engine ("+e+")":""),e?"ref":"you");if(!e){keeper();check()}}
+  else if(c==="K"){e=setPrice(i,px[i]+Math.sign(v)*Math.floor(px[i]*Math.abs(v)/100));log("SHOCK "+MK[i][0]+" "+(v>0?"+":"")+v+"%"+(e?"  refused by engine ("+e+")":""),e?"ref":"you");if(!e)check()}
   if(!silent){
-    if(e)$("msg").textContent=c==="K"?"The engine refused that price move ("+e+"). It only accepts moves it can prove are covered by margin.":"The engine refused that order ("+e+"). It was more than your margin allows.";
-    else $("msg").textContent=c==="K"?"Price moved. The keeper liquidates any account under the line.":"Order filled at the oracle price.";
+    if(e)$("msg").textContent=c==="K"?"The engine refused that price move ("+e+"). It only accepts moves it can prove are covered by margin.":"The engine refused that order ("+e+"). Most often that means it needs more margin than you have.";
+    else $("msg").textContent=c==="K"?"Price moved. Any account under the line gets closed out.":"Order filled at the oracle price.";
   }
   return e
 }
@@ -219,7 +214,7 @@ function boot(sd,replay){
   seed=sd>>>0;rnd=mulberry(seed);tick=0;acts=[];hist=[];nLiq=0;nRef=0;checks=0;halted=false;$("broken").hidden=true;$("log").textContent="";
   px=MK.map(m=>m[1]*U);open0=px.slice();
   w.sim_init(...px.map(p=>BigInt(p)),1000n,500n,50n,400n);
-  w.sim_deposit(0,BigInt(10000*U));for(const b of BOTS)w.sim_deposit(b,BigInt(5000*U));w.sim_deposit(LP,BigInt(5000000*U));
+  w.sim_deposit(0,BigInt(10000*U));for(const b of BOTS)w.sim_deposit(b,BigInt(5000*U));for(let a=0;a<TRADERS;a++)w.sim_deposit(TRADERS+a,BigInt(2000000*U));
   hist.push(px.slice());
   if(replay){let k=0;const end=replay.end;
     while(tick<end){while(k<replay.acts.length&&replay.acts[k][0]===tick){const a=replay.acts[k++];acts.push(a);act(a.slice(1),true)}step();if(halted)break}
@@ -265,7 +260,7 @@ $("bLong").onclick=()=>{const v=amount();v?user(["L",sel,v]):$("msg").textConten
 $("bShort").onclick=()=>{const v=amount();v?user(["S",sel,v]):$("msg").textContent="Enter a size in USD first."};
 $("bClose").onclick=()=>{state().accounts[0].pos[sel]==="0"?$("msg").textContent="You have no "+MK[sel][0]+" position to close.":user(["C",sel,0])};
 $("bDn").onclick=()=>user(["K",sel,-4]);$("bUp").onclick=()=>user(["K",sel,4]);$("bGap").onclick=()=>user(["K",sel,-30]);
-$("bCrash").onclick=()=>{for(let k=0;k<10&&!halted;k++){acts.push([tick,"K",sel,-4]);act(["K",sel,-4],true)}$("msg").textContent="Ten 4% drops in a row on "+MK[sel][0]+". Check the tape for liquidations.";render()};
+$("bCrash").onclick=()=>{for(let k=0;k<10&&!halted;k++){acts.push([tick,"K",sel,-4]);act(["K",sel,-4],true)}$("msg").textContent="Ten 4% drops in a row on "+MK[sel][0]+". Check the tape for margin calls.";render()};
 $("bPause").onclick=()=>{paused=!paused;$("bPause").textContent=paused?"Resume":"Pause"};
 $("bReset").onclick=()=>{try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}boot(Math.floor(Math.random()*2**31))};
 $("bShare").onclick=async()=>{const h=shareHash();try{location.hash=h}catch(e){}const url=location.href.split("#")[0]+"#"+h;

@@ -19,7 +19,7 @@ struct Cell<T>(UnsafeCell<T>);
 unsafe impl<T> Sync for Cell<T> {}
 static SNAP: Cell<Option<Sim>> = Cell(UnsafeCell::new(None));
 static SIM: Cell<Option<Sim>> = Cell(UnsafeCell::new(None));
-const OUT_CAP: usize = 16 * 1024;
+const OUT_CAP: usize = 32 * 1024;
 static OUT: Cell<([u8; OUT_CAP], usize)> = Cell(UnsafeCell::new(([0; OUT_CAP], 0)));
 
 #[allow(clippy::mut_from_ref)]
@@ -28,7 +28,11 @@ fn snapshot_slot() -> &'static mut Option<Sim> {
 }
 
 pub const ASSETS: usize = 6;
-pub const ACCOUNTS: usize = 8;
+/// Traders are accounts 0..TRADERS. Each trader has a dedicated house counterparty account at
+/// TRADERS + trader, so closing a trader out always cancels both sides exactly.
+pub const TRADERS: usize = 7;
+pub const ACCOUNTS: usize = 2 * TRADERS;
+const TAKEOVER_FEE_BPS: u64 = 50;
 const MARKET_ID: [u8; 32] = [7; 32];
 const OWNER: [u8; 32] = [9; 32];
 
@@ -43,6 +47,7 @@ pub struct Sim {
     withdrawn: u128,
     pub last_error: &'static str,
     pub last_crank: u32,
+    pub last_takeover: u32,
 }
 
 fn err_name(e: V16Error) -> &'static str {
@@ -113,7 +118,7 @@ impl Sim {
             acct.init_empty_in_place(ph)?;
             accounts[a] = acct;
         }
-        let sim = Sim { header, markets, accounts, prices: init_prices, slot: 0, deposited: 0, withdrawn: 0, last_error: "", last_crank: 0 };
+        let sim = Sim { header, markets, accounts, prices: init_prices, slot: 0, deposited: 0, withdrawn: 0, last_error: "", last_crank: 0, last_takeover: 0 };
         Ok(sim)
     }
 
@@ -220,11 +225,60 @@ impl Sim {
             .is_some();
         if ok {
             self.housekeeping();
+            self.last_takeover = self.takeovers();
             self.last_crank = self.crank();
             self.housekeeping();
             self.last_error = "";
         }
         ok
+    }
+
+    /// Market-maker backstop, a wrapper policy and not an engine rule: when the engine certifies
+    /// a trader below the maintenance requirement, that trader's house counterparty closes the
+    /// whole position at the oracle price as an ordinary trade, charging the configured fee.
+    /// Both sides cancel exactly, so no other account is touched. The engine still decides
+    /// whether the trade is allowed; anything left falls through to the engine's own
+    /// liquidation in `crank`. Returns a bitmask of traders closed out.
+    fn takeovers(&mut self) -> u32 {
+        let mut mask = 0u32;
+        for a in 0..TRADERS {
+            let under = self.tx(|s| {
+                let mut market = MarketGroupV16ViewMut::new(&mut s.header, &mut s.markets);
+                let mut p = PortfolioV16ViewMut::new(&mut s.accounts[a]);
+                let c = market.full_account_refresh_not_atomic(&mut p)?;
+                Ok(c.certified_maintenance_req != 0 && c.certified_equity < c.certified_maintenance_req as i128)
+            });
+            if under != Some(true) { continue; }
+            let pos = self.effective_positions(a);
+            for i in 0..ASSETS {
+                if pos[i] != 0 && self.trade(a, TRADERS + a, i, -pos[i], TAKEOVER_FEE_BPS) {
+                    mask |= 1 << a;
+                }
+            }
+        }
+        mask
+    }
+
+    /// Effective (post-ADL) signed size per asset for one account.
+    pub fn effective_positions(&self, a: usize) -> [i128; ASSETS] {
+        let mut pos = [0i128; ASSETS];
+        for leg in self.accounts[a].legs.iter() {
+            if let Ok(l) = leg.try_to_runtime() {
+                if l.active && (l.asset_index as usize) < ASSETS {
+                    let i = l.asset_index as usize;
+                    if let Ok(asset) = self.markets[i].engine.asset.try_to_runtime() {
+                        let long = l.basis_pos_q > 0;
+                        let (a_side, epoch) = if long { (asset.a_long, asset.epoch_long) } else { (asset.a_short, asset.epoch_short) };
+                        if epoch == l.epoch_snap && l.a_basis != 0 {
+                            let abs = l.basis_pos_q.unsigned_abs();
+                            let eff = match abs.checked_mul(a_side) { Some(v) => v / l.a_basis, None => abs / l.a_basis * a_side };
+                            pos[i] = if long { eff as i128 } else { -(eff as i128) };
+                        }
+                    }
+                }
+            }
+        }
+        pos
     }
 
     /// Permissionless upkeep any keeper may call: retire backing buckets whose freshness window
@@ -351,24 +405,7 @@ impl Sim {
                 "{}{{\"capital\":\"{}\",\"pnl\":\"{}\",\"equity\":\"{}\",\"im\":\"{}\",\"mm\":\"{}\",\"cert\":{},\"pos\":[",
                 if a > 0 { "," } else { "" }, self.accounts[a].capital.get(), self.accounts[a].pnl.get(), eq, im, mm, ok
             );
-            let mut pos = [0i128; ASSETS];
-            for leg in self.accounts[a].legs.iter() {
-                if let Ok(l) = leg.try_to_runtime() {
-                    if l.active && (l.asset_index as usize) < ASSETS {
-                        // Effective size after the engine's quantity-ADL scaling of this side.
-                        let i = l.asset_index as usize;
-                        if let Ok(asset) = self.markets[i].engine.asset.try_to_runtime() {
-                            let long = l.basis_pos_q > 0;
-                            let (a_side, epoch) = if long { (asset.a_long, asset.epoch_long) } else { (asset.a_short, asset.epoch_short) };
-                            if epoch == l.epoch_snap && l.a_basis != 0 {
-                                let abs = l.basis_pos_q.unsigned_abs();
-                                let eff = match abs.checked_mul(a_side) { Some(v) => v / l.a_basis, None => abs / l.a_basis * a_side };
-                                pos[i] = if long { eff as i128 } else { -(eff as i128) };
-                            }
-                        }
-                    }
-                }
-            }
+            let pos = self.effective_positions(a);
             for i in 0..ASSETS {
                 let _ = write!(o, "{}\"{}\"", if i > 0 { "," } else { "" }, pos[i]);
             }
@@ -408,11 +445,14 @@ pub extern "C" fn sim_deposit(acct: u32, amount: u64) -> i32 { with(0, |s| s.dep
 #[no_mangle]
 pub extern "C" fn sim_withdraw(acct: u32, amount: u64) -> i32 { with(0, |s| s.withdraw(acct as usize, amount as u128) as i32) }
 #[no_mangle]
-pub extern "C" fn sim_trade(a: u32, b: u32, asset: u32, size_q: i64, fee_bps: u64) -> i32 { with(0, |s| s.trade(a as usize, b as usize, asset as usize, size_q as i128, fee_bps) as i32) }
+pub extern "C" fn sim_trade(a: u32, asset: u32, size_q: i64, fee_bps: u64) -> i32 { with(0, |s| if (a as usize) < TRADERS { s.trade(a as usize, TRADERS + a as usize, asset as usize, size_q as i128, fee_bps) as i32 } else { 0 }) }
 #[no_mangle]
 pub extern "C" fn sim_set_price(asset: u32, price: u64, funding_e9: i64) -> i32 { with(0, |s| s.set_price(asset as usize, price, funding_e9 as i128) as i32) }
 #[no_mangle]
 pub extern "C" fn sim_tick(p0: u64, p1: u64, p2: u64, p3: u64, p4: u64, p5: u64) -> i32 { with(0, |s| s.tick([p0, p1, p2, p3, p4, p5]) as i32) }
+/// Bitmask of accounts the house took over during the last tick.
+#[no_mangle]
+pub extern "C" fn sim_last_takeover() -> u32 { with(0, |s| s.last_takeover) }
 /// Bitmask of accounts the engine liquidated during the last tick's crank.
 #[no_mangle]
 pub extern "C" fn sim_last_crank() -> u32 { with(0, |s| s.last_crank) }
