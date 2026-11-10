@@ -75,7 +75,7 @@ button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
     <div class="chips">
       <span class="chip">engine <b>percolator@37cb14e</b></span>
       <span class="chip"><b>paper money</b></span>
-      <span class="chip"><b>simulated prices</b></span>
+      <span class="chip"><b id="pmode">simulated prices</b></span>
       <span class="chip">slot <b id="slot">0</b></span>
     </div>
   </div>
@@ -104,7 +104,7 @@ button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
           <button id="bClose" type="button">Close</button>
         </div>
         <div class="msg" id="msg">You start with $10,000 of paper money. The engine allows up to 10x.</div>
-        <div class="row">
+        <div class="row" id="brk">
           <label>Break it</label>
           <button class="ghost" id="bDn" type="button">Shock -4%</button>
           <button class="ghost" id="bUp" type="button">Shock +4%</button>
@@ -114,6 +114,7 @@ button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
         <div class="row">
           <button class="ghost" id="bPause" type="button">Pause</button>
           <button class="ghost" id="bReset" type="button">New session</button>
+          <button class="ghost" id="bMode" type="button">Use simulation</button>
           <button class="ghost" id="bShare" type="button">Copy replay link</button>
         </div>
       </div>
@@ -142,14 +143,16 @@ button.ghost{border-color:var(--line);color:var(--dim);font-weight:400}
     </div>
   </div>
   <div class="foot">
-    Paper money only. Prices are a random simulation, not live quotes. Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Nothing here is audited and nothing here holds or moves real funds.
+    Paper money only. Prices come live from Pyth when the page can reach it, and from a random simulation otherwise; the chip at the top says which. Stock feeds only update during US market hours. Each trader faces a house account that takes the other side. When the engine certifies an account below maintenance margin, the house closes it at the oracle price; if that is refused, the engine's own liquidation runs. Nothing here is audited and nothing here holds or moves real funds.
     The engine is <a href="https://github.com/aeyakovenko/percolator">Percolator</a> by Anatoly Yakovenko at commit 37cb14e, Apache-2.0, compiled to WebAssembly without changes. This page is not affiliated with or endorsed by its author.
     There is no official token.
   </div>
 </div>
 <script>
 const WASM_B64="__WASM__";
-const MK=[["SOL",150],["BTC",100000],["ETH",3000],["NVDA",140],["TSLA",350],["AAPL",230]];
+const MK=[["SOL",150,"Crypto.SOL/USD","crypto"],["BTC",100000,"Crypto.BTC/USD","crypto"],["ETH",3000,"Crypto.ETH/USD","crypto"],["NVDA",140,"Equity.US.NVDA/USD","equity"],["TSLA",350,"Equity.US.TSLA/USD","equity"],["AAPL",230,"Equity.US.AAPL/USD","equity"]];
+const HERMES="https://hermes.pyth.network";
+let live=false,feeds=null,latest=null,closed=[],poll=null,lastOk=0;
 const U=1e6,BOTS=[1,2,3,4,5,6],TRADERS=7;
 let w,rnd,seed,tick=0,sel=0,paused=false,halted=false,acts=[],hist=[],px=[],open0=[],nLiq=0,nRef=0,checks=0,timer=null,S=null;
 const $=id=>document.getElementById(id);
@@ -193,7 +196,9 @@ function check(){
 }
 function step(){
   tick++;
-  const next=px.map((p,i)=>{const trend=Math.sin((tick+i*37)/45)*0.0025,r=(rnd()-.5)*0.03+trend;return Math.max(1,Math.round(p*(1+Math.max(-.035,Math.min(.035,r)))))});
+  // Live: follow the Pyth price, moving at most 3.9% per slot because the engine caps each slot's move.
+  const next=live?px.map((p,i)=>latest&&latest[i]?Math.round(Math.max(p*0.961,Math.min(p*1.039,latest[i]))):p)
+    :px.map((p,i)=>{const trend=Math.sin((tick+i*37)/45)*0.0025,r=(rnd()-.5)*0.03+trend;return Math.max(1,Math.round(p*(1+Math.max(-.035,Math.min(.035,r)))))});
   tickTo(next);
   hist.push(px.slice());if(hist.length>240)hist.shift();
   bots();check();
@@ -209,10 +214,11 @@ function act(a,silent){ // a=[code,asset,value]
   }
   return e
 }
-function user(a){if(halted)return;acts.push([tick,...a]);act(a);render()}
+function user(a){if(halted)return;if(live&&a[0]==="K")return;acts.push([tick,...a]);act(a);render()}
 function boot(sd,replay){
   seed=sd>>>0;rnd=mulberry(seed);tick=0;acts=[];hist=[];nLiq=0;nRef=0;checks=0;halted=false;$("broken").hidden=true;$("log").textContent="";
-  px=MK.map(m=>m[1]*U);open0=px.slice();
+  px=(live&&latest&&latest.every(Boolean))?latest.slice():MK.map(m=>m[1]*U);open0=px.slice();
+  $("pmode").textContent=live?"live prices, Pyth":"simulated prices";$("brk").hidden=live;$("bShare").hidden=live;$("bMode").textContent=live?"Use simulation":"Use live prices";
   w.sim_init(...px.map(p=>BigInt(p)),1000n,500n,50n,400n);
   w.sim_deposit(0,BigInt(10000*U));for(const b of BOTS)w.sim_deposit(b,BigInt(5000*U));for(let a=0;a<TRADERS;a++)w.sim_deposit(TRADERS+a,BigInt(2000000*U));
   hist.push(px.slice());
@@ -220,7 +226,7 @@ function boot(sd,replay){
     while(tick<end){while(k<replay.acts.length&&replay.acts[k][0]===tick){const a=replay.acts[k++];acts.push(a);act(a.slice(1),true)}step();if(halted)break}
     while(k<replay.acts.length){const a=replay.acts[k++];acts.push(a);act(a.slice(1),true)}
     $("msg").textContent="Replayed a shared session of "+end+" slots. It is live again from here."}
-  else{for(let i=0;i<40;i++)step();$("msg").textContent="You start with $10,000 of paper money. The engine allows up to 10x."}
+  else{if(!live)for(let i=0;i<40;i++)step();$("msg").textContent=live?"Live Pyth prices, paper money. You start with $10,000 and the engine allows up to 10x.":"You start with $10,000 of paper money. The engine allows up to 10x."}
   render()
 }
 function render(){
@@ -229,7 +235,7 @@ function render(){
   const tb=$("mk");tb.textContent="";
   MK.forEach((m,i)=>{const tr=document.createElement("tr");if(i===sel)tr.className="sel";tr.tabIndex=0;
     const ch=(px[i]/open0[i]-1)*100,oi=Number(S.assets[i].oi_long)/U*px[i]/U,my=Number(A.pos[i])/U;
-    const cells=[m[0],"$"+fmt(px[i]/U,px[i]>=1000*U?0:2),(ch>=0?"+":"")+fmt(ch)+"%","$"+fmt(oi,0),my?((my>0?"+":"")+fmt(my,3)):"0"];
+    const cells=[m[0]+(live&&closed[i]?" (closed)":""),"$"+fmt(px[i]/U,px[i]>=1000*U?0:2),(ch>=0?"+":"")+fmt(ch)+"%","$"+fmt(oi,0),my?((my>0?"+":"")+fmt(my,3)):"0"];
     cells.forEach((t,k)=>{const td=document.createElement("td");td.textContent=t;if(k===2)td.className=ch>=0?"up":"down";if(k===4&&my)td.className=my>0?"up":"down";tr.appendChild(td)});
     tr.onclick=()=>{sel=i;render()};tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sel=i;render()}};tb.appendChild(tr)});
   $("eq").textContent=usd(A.equity);$("cap").textContent=usd(A.capital);$("im").textContent=usd(A.im);$("mm").textContent=usd(A.mm);
@@ -265,10 +271,38 @@ $("bPause").onclick=()=>{paused=!paused;$("bPause").textContent=paused?"Resume":
 $("bReset").onclick=()=>{try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}boot(Math.floor(Math.random()*2**31))};
 $("bShare").onclick=async()=>{const h=shareHash();try{location.hash=h}catch(e){}const url=location.href.split("#")[0]+"#"+h;
   try{await navigator.clipboard.writeText(url);$("msg").textContent="Replay link copied. It replays this exact session."}catch(e){$("msg").textContent="Could not copy. The replay link is now in the address bar."}};
+async function getJSON(u){const c=new AbortController(),t=setTimeout(()=>c.abort(),5000);try{const r=await fetch(u,{signal:c.signal});if(!r.ok)throw new Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(t)}}
+async function resolveFeeds(){
+  const out=[];closed=[];
+  for(const m of MK){const list=await getJSON(HERMES+"/v2/price_feeds?query="+encodeURIComponent(m[0])+"&asset_type="+m[3]);
+    const f=list.find(x=>x.attributes&&x.attributes.symbol===m[2]);if(!f)throw new Error("no feed for "+m[0]);
+    out.push(f.id);closed.push(!!(f.market_hours&&f.market_hours.is_open===false))}
+  return out
+}
+async function pullPrices(){
+  const j=await getJSON(HERMES+"/v2/updates/price/latest?parsed=true&"+feeds.map(id=>"ids%5B%5D="+id).join("&"));
+  const by={};for(const p of j.parsed||[])by[p.id]=Number(p.price.price)*Math.pow(10,p.price.expo);
+  const v=feeds.map(id=>{const x=by[id];return x>0?Math.round(x*U):0});
+  if(!v.every(Boolean))throw new Error("missing price");
+  latest=v;lastOk=Date.now()
+}
+async function goLive(){
+  try{if(!feeds)feeds=await resolveFeeds();await pullPrices();live=true;
+    clearInterval(poll);poll=setInterval(()=>{pullPrices().catch(()=>{})},2000);return true}
+  catch(e){live=false;return false}
+}
+$("bMode").onclick=async()=>{
+  if(live){live=false;clearInterval(poll);boot(Math.floor(Math.random()*2**31));return}
+  $("msg").textContent="Connecting to Pyth...";
+  if(await goLive())boot(Math.floor(Math.random()*2**31));
+  else{$("pmode").textContent="simulated prices";$("msg").textContent="Live prices could not be reached from this page, so prices stay simulated."}
+};
 (async()=>{
   const bin=Uint8Array.from(atob(WASM_B64),c=>c.charCodeAt(0));
   w=(await WebAssembly.instantiate(bin,{})).instance.exports;
-  const r=readHash();boot(r?r.seed:Math.floor(Math.random()*2**31),r);
-  timer=setInterval(()=>{if(paused||halted||document.hidden)return;step();render()},900);
+  const r=readHash();if(!r)await goLive();
+  boot(r?r.seed:Math.floor(Math.random()*2**31),r);
+  if(!r&&!live)$("msg").textContent="Live prices could not be reached from this page, so prices are simulated. You start with $10,000 of paper money.";
+  timer=setInterval(()=>{if(paused||halted||document.hidden)return;if(live&&Date.now()-lastOk>15000){$("pmode").textContent="live prices stalled";return}if(live)$("pmode").textContent="live prices, Pyth";step();render()},900);
 })().catch(e=>{$("msg").textContent="The engine failed to load in this browser: "+e.message});
 </script>
